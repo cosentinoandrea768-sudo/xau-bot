@@ -4,64 +4,45 @@ import os
 
 app = Flask(__name__)
 
-# ==========================
-# VARIABILI AMBIENTE RENDER
-# ==========================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
-
-if not TELEGRAM_TOKEN or not CHAT_ID:
-    print("ERRORE: TELEGRAM_TOKEN o CHAT_ID non impostati nelle variabili ambiente")
 
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 
-# ==========================
-# ROUTE WEBHOOK TRADINGVIEW
-# ==========================
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot Telegram Webhook attivo", 200
+
+
 @app.route("/", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
 
-        if not data:
-            return jsonify({"error": "No JSON received"}), 400
+        print("POST ricevuto:", data)
 
         message = data.get("message")
 
         if not message:
-            return jsonify({"error": "No message field in JSON"}), 400
+            return jsonify({"error": "No message field"}), 400
 
         payload = {
             "chat_id": CHAT_ID,
             "text": message
         }
 
-        response = requests.post(TELEGRAM_URL, json=payload)
+        r = requests.post(TELEGRAM_URL, json=payload)
 
-        if response.status_code == 200:
-            print("Messaggio inviato a Telegram:", message)
-            return jsonify({"status": "Message sent"}), 200
-        else:
-            print("Errore Telegram:", response.text)
-            return jsonify({"error": "Telegram API error"}), 500
+        print("Risposta Telegram:", r.text)
+
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        print("Errore webhook:", str(e))
+        print("Errore:", str(e))
         return jsonify({"error": str(e)}), 500
 
 
-# ==========================
-# ROUTE TEST (GET)
-# ==========================
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot Telegram Webhook attivo", 200
-
-
-# ==========================
-# AVVIO SERVER
-# ==========================
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
