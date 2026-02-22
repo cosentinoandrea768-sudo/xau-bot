@@ -4,8 +4,8 @@ import os
 
 app = Flask(__name__)
 
-BOT_TOKEN = os.environ.get("8393500223:AAHVRqD-22xUYLwMR1wgF0VUV_u4s6U9dR0")
-CHAT_ID = os.environ.get("8369961034")
+BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
