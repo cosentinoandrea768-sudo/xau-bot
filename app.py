@@ -4,7 +4,7 @@ import os
 import json
 
 # ==============================
-# Telegram variables (set on Render)
+# Telegram settings (Render environment variables)
 # ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -51,15 +51,16 @@ def format_message(data: dict) -> str:
 @app.route("/", methods=["POST"])
 def webhook():
     try:
+        # Prima prova a leggere JSON direttamente
         data = request.get_json(silent=True)
 
-        # If TradingView sends plain text, try parsing it
+        # Se non c'è JSON valido, proviamo a leggere come stringa e parse
         if not data:
             raw_data = request.data.decode("utf-8")
             try:
                 data = json.loads(raw_data)
-            except:
-                return jsonify({"error": "Cannot parse JSON"}), 400
+            except Exception as e:
+                return jsonify({"error": "Invalid JSON payload", "details": str(e)}), 400
 
         message = format_message(data)
 
