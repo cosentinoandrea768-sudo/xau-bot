@@ -1,51 +1,106 @@
-# app.py
 from flask import Flask, request, jsonify
 import requests
 import os
+
+app = Flask(__name__)
 
 # ==============================
 # Variabili Telegram (da impostare su Render)
 # ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
+
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # ==============================
-# Creazione app Flask
+# Funzione invio Telegram
 # ==============================
-app = Flask(__name__)
+def send_telegram(message):
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML"
+    }
+    r = requests.post(TELEGRAM_URL, json=payload)
+    print("Telegram:", r.text)
 
 # ==============================
-# Webhook per TradingView
+# Webhook TradingView
 # ==============================
 @app.route("/", methods=["POST"])
 def webhook():
     try:
-        # Prova a leggere JSON
         data = request.get_json(silent=True)
 
-        # Se non è JSON, leggiamo il testo puro
         if not data:
-            raw_data = request.data.decode("utf-8")
-            print("Raw body:", raw_data)
-            message = raw_data
+            return jsonify({"error": "No JSON received"}), 400
+
+        # 🔐 Controllo secret
+        if data.get("secret") != WEBHOOK_SECRET:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        event = data.get("event")
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        side = data.get("side")
+
+        entry = float(data.get("entry", 0))
+        exit_price = float(data.get("exit", 0))
+        tp = float(data.get("tp", 0))
+        sl = float(data.get("sl", 0))
+        profit = float(data.get("profit_percent", 0))
+
+        # ==========================
+        # Calcolo R:R reale
+        # ==========================
+        rr_real = 0
+        if event in ["TP_HIT", "SL_HIT"] and entry != 0:
+            risk = abs(entry - sl)
+            reward = abs(exit_price - entry)
+            if risk != 0:
+                rr_real = round(reward / risk, 2)
+
+        # ==========================
+        # Formattazione messaggi Telegram
+        # ==========================
+        if event == "OPEN":
+            message = f"""
+<b>🟢 {side} OPEN</b>
+━━━━━━━━━━━━━━━━━━
+<b>Symbol:</b> {symbol}
+<b>TF:</b> {timeframe}
+<b>Entry:</b> {entry}
+<b>TP:</b> {tp}
+<b>SL:</b> {sl}
+"""
+
+        elif event == "TP_HIT":
+            message = f"""
+<b>🎯 TAKE PROFIT HIT</b>
+━━━━━━━━━━━━━━━━━━
+<b>Symbol:</b> {symbol}
+<b>Side:</b> {side}
+<b>Exit:</b> {exit_price}
+<b>Profit:</b> {profit:.2f} %
+<b>R:R:</b> {rr_real}
+"""
+
+        elif event == "SL_HIT":
+            message = f"""
+<b>❌ STOP LOSS HIT</b>
+━━━━━━━━━━━━━━━━━━
+<b>Symbol:</b> {symbol}
+<b>Side:</b> {side}
+<b>Exit:</b> {exit_price}
+<b>Loss:</b> {profit:.2f} %
+<b>R:R:</b> {rr_real}
+"""
+
         else:
-            print("JSON ricevuto:", data)
-            message = data.get("message", str(data))
+            message = f"⚠️ Unknown event\n{data}"
 
-        if not message:
-            return jsonify({"error": "No message received"}), 400
-
-        # Payload per Telegram
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": message
-        }
-
-        # Invia messaggio a Telegram
-        r = requests.post(TELEGRAM_URL, json=payload)
-        print("Risposta Telegram:", r.text)
-
+        send_telegram(message)
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
@@ -53,8 +108,8 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 # ==============================
-# Endpoint base per test
+# Endpoint GET di test
 # ==============================
 @app.route("/", methods=["GET"])
 def index():
-    return "Bot Telegram Webhook attivo ✅", 200
+    return "TradingView → Telegram Bot PRO attivo 🚀", 200
