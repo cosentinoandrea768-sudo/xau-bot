@@ -4,7 +4,7 @@ import os
 import json
 
 # ==============================
-# Telegram settings (Render environment variables)
+# Telegram settings (set on Render)
 # ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -51,10 +51,10 @@ def format_message(data: dict) -> str:
 @app.route("/", methods=["POST"])
 def webhook():
     try:
-        # Prima prova a leggere JSON direttamente
+        # Legge JSON da TradingView
         data = request.get_json(silent=True)
 
-        # Se non c'è JSON valido, proviamo a leggere come stringa e parse
+        # Se non è JSON valido, prova a leggere come stringa e fare parse
         if not data:
             raw_data = request.data.decode("utf-8")
             try:
@@ -81,11 +81,16 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 # ==============================
-# GET endpoint for test
+# GET endpoint per test
 # ==============================
 @app.route("/", methods=["GET"])
 def index():
     return "Bot Telegram Webhook attivo ✅", 200
 
+# ==============================
+# Main
+# ==============================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"Starting Flask app on port {port}")
+    app.run(host="0.0.0.0", port=port)
