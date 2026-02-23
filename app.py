@@ -3,16 +3,18 @@ import requests
 import os
 import json
 
-# Telegram settings
+# ==============================
+# Telegram variables (set on Render)
+# ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 app = Flask(__name__)
 
-# ==========================
-# Format message for Telegram
-# ==========================
+# ==============================
+# Format Telegram message
+# ==============================
 def format_message(data: dict) -> str:
     event = data.get("event", "")
     side = data.get("side", "")
@@ -32,7 +34,8 @@ def format_message(data: dict) -> str:
         profit_percent = "NaN"
 
     if event == "OPEN":
-        msg = f"💹 {side} ENTRY\nPair: {symbol}\nTimeframe: {timeframe}m\nPrice: {entry}\nTP: {tp}\nSL: {sl}"
+        emoji = "🚀" if side == "LONG" else "⬇️"
+        msg = f"{emoji} {side} ENTRY\nPair: {symbol}\nTimeframe: {timeframe}m\nPrice: {entry}\nTP: {tp}\nSL: {sl}"
     else:
         try:
             pips_val = float(profit_percent)
@@ -42,9 +45,9 @@ def format_message(data: dict) -> str:
             msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {profit_percent}%"
     return msg
 
-# ==========================
+# ==============================
 # Webhook endpoint
-# ==========================
+# ==============================
 @app.route("/", methods=["POST"])
 def webhook():
     try:
@@ -76,9 +79,9 @@ def webhook():
         print("Errore webhook:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# ==========================
-# Base GET for test
-# ==========================
+# ==============================
+# GET endpoint for test
+# ==============================
 @app.route("/", methods=["GET"])
 def index():
     return "Bot Telegram Webhook attivo ✅", 200
