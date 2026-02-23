@@ -25,17 +25,21 @@ def webhook():
         symbol = str(data.get("symbol", ""))
         side = str(data.get("side", ""))
 
-        # Entry e TP/SL
-        entry = data.get("entry", None)
-        tp = data.get("tp", None)
-        sl = data.get("sl", None)
-        exit_price = data.get("exit", None)
-        profit_percent = data.get("profit_percent", None)
+        # Entry, TP/SL, Exit, Profit
+        entry = data.get("entry")
+        tp = data.get("tp")
+        sl = data.get("sl")
+        exit_price = data.get("exit")
+        profit_percent = data.get("profit_percent")
 
-        # Costruisci il messaggio
-        tf_str = str(data.get("timeframe", "")) + "m" if "timeframe" in data else ""
-        message_lines = [f"{event} - {symbol} {side}", f"Timeframe: {tf_str}"]
+        # Timeframe in minuti
+        tf_val = data.get("timeframe")
+        tf_str = f"{tf_val}m" if tf_val is not None else ""
 
+        # Costruisci messaggio solo con i campi esistenti
+        message_lines = [f"{event} - {symbol} {side}"]
+        if tf_str:
+            message_lines.append(f"Timeframe: {tf_str}")
         if entry is not None:
             message_lines.append(f"Entry: {entry}")
         if tp is not None and event == "OPEN":
@@ -45,11 +49,10 @@ def webhook():
         if exit_price is not None and event == "CLOSE":
             message_lines.append(f"Exit: {exit_price}")
         if profit_percent is not None and event == "CLOSE":
-            # Arrotonda a 2 decimali
             try:
                 profit_percent = round(float(profit_percent), 2)
             except:
-                profit_percent = profit_percent
+                pass
             message_lines.append(f"Profit %: {profit_percent}")
 
         message = "\n".join(message_lines)
