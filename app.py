@@ -1,22 +1,18 @@
 from flask import Flask, request, jsonify
 import requests
 import os
+import json
 
-# ==============================
-# Variabili Telegram (da impostare su Render)
-# ==============================
+# Telegram settings
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-# ==============================
-# Creazione app Flask
-# ==============================
 app = Flask(__name__)
 
-# ==============================
-# Funzione per formattare il messaggio Telegram
-# ==============================
+# ==========================
+# Format message for Telegram
+# ==========================
 def format_message(data: dict) -> str:
     event = data.get("event", "")
     side = data.get("side", "")
@@ -28,30 +24,39 @@ def format_message(data: dict) -> str:
     sl = data.get("sl", "")
     profit_percent = data.get("profit_percent", "")
 
-    # Formatta con massimo 2 decimali per pips/profit/loss
+    # Format profit/loss with max 2 decimals
     try:
-        if profit_percent != "NaN":
+        if profit_percent not in ["NaN", None, ""]:
             profit_percent = f"{float(profit_percent):.2f}"
     except:
-        pass
+        profit_percent = "NaN"
 
     if event == "OPEN":
         msg = f"💹 {side} ENTRY\nPair: {symbol}\nTimeframe: {timeframe}m\nPrice: {entry}\nTP: {tp}\nSL: {sl}"
     else:
-        # Chiudi trade
-        pips_sign = "+" if float(profit_percent) >= 0 else "-"
-        msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {pips_sign}{abs(float(profit_percent))}%"
+        try:
+            pips_val = float(profit_percent)
+            pips_sign = "+" if pips_val >= 0 else "-"
+            msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {pips_sign}{abs(pips_val)}%"
+        except:
+            msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {profit_percent}%"
     return msg
 
-# ==============================
+# ==========================
 # Webhook endpoint
-# ==============================
+# ==========================
 @app.route("/", methods=["POST"])
 def webhook():
     try:
-        data = request.get_json(force=True)
+        data = request.get_json(silent=True)
+
+        # If TradingView sends plain text, try parsing it
         if not data:
-            return jsonify({"error": "No JSON received"}), 400
+            raw_data = request.data.decode("utf-8")
+            try:
+                data = json.loads(raw_data)
+            except:
+                return jsonify({"error": "Cannot parse JSON"}), 400
 
         message = format_message(data)
 
@@ -71,15 +76,12 @@ def webhook():
         print("Errore webhook:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# ==============================
-# Endpoint base per test
-# ==============================
+# ==========================
+# Base GET for test
+# ==========================
 @app.route("/", methods=["GET"])
 def index():
     return "Bot Telegram Webhook attivo ✅", 200
 
-# ==============================
-# Main (per test locale)
-# ==============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
