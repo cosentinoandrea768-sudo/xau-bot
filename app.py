@@ -65,40 +65,31 @@ def webhook():
         # Formattazione messaggi Telegram
         # ==========================
         if event == "OPEN":
-            message = f"""
-<b>🟢 {side} OPEN</b>
-━━━━━━━━━━━━━━━━━━
-<b>Symbol:</b> {symbol}
-<b>TF:</b> {timeframe}
-<b>Entry:</b> {entry}
-<b>TP:</b> {tp}
-<b>SL:</b> {sl}
-"""
+            message = f"<b>🟢 {side} OPEN</b>\n" \
+                      f"Symbol: {symbol}\n" \
+                      f"Timeframe: {timeframe}m\n" \
+                      f"Entry: {entry}\n" \
+                      f"TP: {tp}\n" \
+                      f"SL: {sl}"
 
         elif event == "TP_HIT":
-            message = f"""
-<b>🎯 TAKE PROFIT HIT</b>
-━━━━━━━━━━━━━━━━━━
-<b>Symbol:</b> {symbol}
-<b>Side:</b> {side}
-<b>Exit:</b> {exit_price}
-<b>Profit:</b> {profit:.2f} %
-<b>R:R:</b> {rr_real}
-"""
+            message = f"<b>🎯 TAKE PROFIT HIT</b>\n" \
+                      f"Symbol: {symbol}\n" \
+                      f"Side: {side}\n" \
+                      f"Exit: {exit_price}\n" \
+                      f"Profit: {profit:.2f} %\n" \
+                      f"R:R: {rr_real}"
 
         elif event == "SL_HIT":
-            message = f"""
-<b>❌ STOP LOSS HIT</b>
-━━━━━━━━━━━━━━━━━━
-<b>Symbol:</b> {symbol}
-<b>Side:</b> {side}
-<b>Exit:</b> {exit_price}
-<b>Loss:</b> {profit:.2f} %
-<b>R:R:</b> {rr_real}
-"""
+            message = f"<b>❌ STOP LOSS HIT</b>\n" \
+                      f"Symbol: {symbol}\n" \
+                      f"Side: {side}\n" \
+                      f"Exit: {exit_price}\n" \
+                      f"Loss: {profit:.2f} %\n" \
+                      f"R:R: {rr_real}"
 
         else:
-            message = f"⚠️ Unknown event\n{data}"
+            message = f"⚠️ Unknown event: {event}\n{data}"
 
         send_telegram(message)
         return jsonify({"status": "ok"}), 200
