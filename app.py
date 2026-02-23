@@ -8,24 +8,31 @@ app = Flask(__name__)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-@app.route("/", methods=["GET"])
-def index():
-    return "Bot Telegram Webhook attivo ✅", 200
+# =============================
+# HEALTH CHECK (UptimeRobot)
+# =============================
+@app.route("/", methods=["GET", "HEAD"])
+def home():
+    return "OK", 200
 
-@app.route("/", methods=["POST"])
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "running"}), 200
+
+# =============================
+# WEBHOOK (TradingView)
+# =============================
+@app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        # Prendiamo SEMPRE il body grezzo
         raw_data = request.get_data(as_text=True)
 
         if not raw_data:
             return jsonify({"error": "Empty body"}), 400
 
-        # Proviamo a convertirlo in JSON
         try:
             data = json.loads(raw_data)
         except:
-            # Se non è JSON valido, lo mandiamo comunque come testo
             data = {"raw": raw_data}
 
         message = f"Webhook ricevuto:\n{data}"
