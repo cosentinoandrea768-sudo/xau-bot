@@ -9,7 +9,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
 # =============================
-# HEALTH CHECK (UptimeRobot)
+# HEALTH CHECK
 # =============================
 @app.route("/", methods=["GET", "HEAD"])
 def home():
@@ -19,8 +19,66 @@ def home():
 def health():
     return jsonify({"status": "running"}), 200
 
+
 # =============================
-# WEBHOOK (TradingView)
+# FORMAT MESSAGE
+# =============================
+def format_message(data):
+
+    event = data.get("event", "")
+    symbol = data.get("symbol", "")
+    timeframe = data.get("timeframe", "")
+    side = data.get("side", "")
+    entry = data.get("entry", "")
+    exit_price = data.get("exit", "")
+    tp = data.get("tp", "")
+    sl = data.get("sl", "")
+    profit_percent = data.get("profit_percent", "")
+
+    # arrotondamenti a 3 decimali
+    def round3(value):
+        try:
+            return f"{float(value):.3f}"
+        except:
+            return value
+
+    entry = round3(entry)
+    tp = round3(tp)
+    sl = round3(sl)
+
+    if event == "OPEN":
+
+        emoji = "🚀" if side == "LONG" else "⬇️"
+
+        return (
+            f"{emoji} {side}\n"
+            f"Pair: {symbol}\n"
+            f"Timeframe: {timeframe}m\n"
+            f"Price: {entry}\n"
+            f"TP: {tp}\n"
+            f"SL: {sl}"
+        )
+
+    elif event == "CLOSE":
+
+        try:
+            profit = float(profit_percent)
+            sign = "+" if profit >= 0 else "-"
+            profit_str = f"{sign}{abs(profit):.2f}%"
+        except:
+            profit_str = "0.00%"
+
+        return (
+            f"⚡ EXIT {side}\n"
+            f"Pair: {symbol}\n"
+            f"Result: {profit_str}"
+        )
+
+    return "Messaggio non riconosciuto"
+
+
+# =============================
+# WEBHOOK
 # =============================
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -30,12 +88,9 @@ def webhook():
         if not raw_data:
             return jsonify({"error": "Empty body"}), 400
 
-        try:
-            data = json.loads(raw_data)
-        except:
-            data = {"raw": raw_data}
+        data = json.loads(raw_data)
 
-        message = f"Webhook ricevuto:\n{data}"
+        message = format_message(data)
 
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
