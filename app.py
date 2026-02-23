@@ -3,18 +3,12 @@ import requests
 import os
 import json
 
-# ==============================
-# Telegram settings (set on Render)
-# ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 app = Flask(__name__)
 
-# ==============================
-# Format Telegram message
-# ==============================
 def format_message(data: dict) -> str:
     event = data.get("event", "")
     side = data.get("side", "")
@@ -26,7 +20,6 @@ def format_message(data: dict) -> str:
     sl = data.get("sl", "")
     profit_percent = data.get("profit_percent", "")
 
-    # Format profit/loss with max 2 decimals
     try:
         if profit_percent not in ["NaN", None, ""]:
             profit_percent = f"{float(profit_percent):.2f}"
@@ -45,16 +38,13 @@ def format_message(data: dict) -> str:
             msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {profit_percent}%"
     return msg
 
-# ==============================
-# Webhook endpoint
-# ==============================
 @app.route("/", methods=["POST"])
 def webhook():
     try:
-        # Legge JSON da TradingView
+        # prima prova a leggere JSON standard
         data = request.get_json(silent=True)
 
-        # Se non è JSON valido, prova a leggere come stringa e fare parse
+        # se fallisce, prova come stringa e fai il parse
         if not data:
             raw_data = request.data.decode("utf-8")
             try:
@@ -64,13 +54,9 @@ def webhook():
 
         message = format_message(data)
 
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": message
-        }
+        payload = {"chat_id": CHAT_ID, "text": message}
 
         r = requests.post(TELEGRAM_URL, json=payload)
-
         if r.status_code != 200:
             return jsonify({"error": f"Telegram API error: {r.text}"}), 500
 
@@ -80,17 +66,12 @@ def webhook():
         print("Errore webhook:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# ==============================
-# GET endpoint per test
-# ==============================
 @app.route("/", methods=["GET"])
 def index():
     return "Bot Telegram Webhook attivo ✅", 200
 
-# ==============================
-# Main
-# ==============================
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 5000))
     print(f"Starting Flask app on port {port}")
     app.run(host="0.0.0.0", port=port)
