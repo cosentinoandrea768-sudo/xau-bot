@@ -12,32 +12,49 @@ app = Flask(__name__)
 @app.route("/", methods=["POST"])
 def webhook():
     try:
-        # Prova a leggere JSON
+        # Legge JSON
         data = request.get_json(silent=True)
-
-        # Se non è JSON, prova a leggere testo e parsarlo
         if not data:
             raw_data = request.data.decode("utf-8")
             try:
                 data = json.loads(raw_data)
             except:
-                # Se non è JSON, metti il testo intero in "message"
                 data = {"event": raw_data}
 
-        # Assicuriamoci di avere sempre le chiavi
-        event = str(data.get("event", "N/A"))
-        symbol = str(data.get("symbol", "N/A"))
-        side = str(data.get("side", "N/A"))
-        entry = str(data.get("entry", "N/A"))
-        exit_price = str(data.get("exit", "N/A"))
-        tp = str(data.get("tp", "N/A"))
-        sl = str(data.get("sl", "N/A"))
-        profit_percent = str(data.get("profit_percent", "N/A"))
+        event = str(data.get("event", ""))
+        symbol = str(data.get("symbol", ""))
+        side = str(data.get("side", ""))
 
-        message = f"{event} - {symbol} {side}\nEntry: {entry}\nExit: {exit_price}\nTP: {tp}\nSL: {sl}\nProfit %: {profit_percent}"
+        # Entry e TP/SL
+        entry = data.get("entry", None)
+        tp = data.get("tp", None)
+        sl = data.get("sl", None)
+        exit_price = data.get("exit", None)
+        profit_percent = data.get("profit_percent", None)
+
+        # Costruisci il messaggio
+        tf_str = str(data.get("timeframe", "")) + "m" if "timeframe" in data else ""
+        message_lines = [f"{event} - {symbol} {side}", f"Timeframe: {tf_str}"]
+
+        if entry is not None:
+            message_lines.append(f"Entry: {entry}")
+        if tp is not None and event == "OPEN":
+            message_lines.append(f"TP: {tp}")
+        if sl is not None and event == "OPEN":
+            message_lines.append(f"SL: {sl}")
+        if exit_price is not None and event == "CLOSE":
+            message_lines.append(f"Exit: {exit_price}")
+        if profit_percent is not None and event == "CLOSE":
+            # Arrotonda a 2 decimali
+            try:
+                profit_percent = round(float(profit_percent), 2)
+            except:
+                profit_percent = profit_percent
+            message_lines.append(f"Profit %: {profit_percent}")
+
+        message = "\n".join(message_lines)
 
         payload = {"chat_id": CHAT_ID, "text": message}
-
         r = requests.post(TELEGRAM_URL, json=payload)
         print("Telegram response:", r.text)
 
