@@ -1,54 +1,85 @@
 from flask import Flask, request, jsonify
 import requests
 import os
-import json
 
+# ==============================
+# Variabili Telegram (da impostare su Render)
+# ==============================
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
+# ==============================
+# Creazione app Flask
+# ==============================
 app = Flask(__name__)
 
+# ==============================
+# Funzione per formattare il messaggio Telegram
+# ==============================
+def format_message(data: dict) -> str:
+    event = data.get("event", "")
+    side = data.get("side", "")
+    symbol = data.get("symbol", "")
+    timeframe = data.get("timeframe", "")
+    entry = data.get("entry", "")
+    exit_price = data.get("exit", "")
+    tp = data.get("tp", "")
+    sl = data.get("sl", "")
+    profit_percent = data.get("profit_percent", "")
+
+    # Formatta con massimo 2 decimali per pips/profit/loss
+    try:
+        if profit_percent != "NaN":
+            profit_percent = f"{float(profit_percent):.2f}"
+    except:
+        pass
+
+    if event == "OPEN":
+        msg = f"💹 {side} ENTRY\nPair: {symbol}\nTimeframe: {timeframe}m\nPrice: {entry}\nTP: {tp}\nSL: {sl}"
+    else:
+        # Chiudi trade
+        pips_sign = "+" if float(profit_percent) >= 0 else "-"
+        msg = f"⚡ {side} EXIT\nPair: {symbol}\nResult: {pips_sign}{abs(float(profit_percent))}%"
+    return msg
+
+# ==============================
+# Webhook endpoint
+# ==============================
 @app.route("/", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
-        
-        event = str(data.get("event",""))
-        symbol = str(data.get("symbol",""))
-        side = str(data.get("side",""))
-        tf = str(data.get("timeframe","")) + "m" if "timeframe" in data else ""
-        entry = data.get("entry")
-        exit_price = data.get("exit")
-        tp = data.get("tp")
-        sl = data.get("sl")
-        pips = data.get("profit_percent")
+        if not data:
+            return jsonify({"error": "No JSON received"}), 400
 
-        lines = [f"{event} - {symbol} {side}"]
-        if tf: lines.append(f"Timeframe: {tf}")
-        if entry is not None and event=="OPEN": lines.append(f"Entry: {entry}")
-        if tp is not None and event=="OPEN": lines.append(f"TP: {tp}")
-        if sl is not None and event=="OPEN": lines.append(f"SL: {sl}")
-        if exit_price is not None and event=="CLOSE": lines.append(f"Exit: {exit_price}")
-        if pips is not None and event=="CLOSE":
-            try: pips = round(float(pips),2)
-            except: pass
-            lines.append(f"Pips: {pips}")
+        message = format_message(data)
 
-        message = "\n".join(lines)
-        payload = {"chat_id": CHAT_ID, "text": message}
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": message
+        }
+
         r = requests.post(TELEGRAM_URL, json=payload)
-        print("Telegram response:", r.text)
 
-        return jsonify({"status":"ok","telegram_response":r.text}),200
+        if r.status_code != 200:
+            return jsonify({"error": f"Telegram API error: {r.text}"}), 500
+
+        return jsonify({"status": "ok"}), 200
 
     except Exception as e:
         print("Errore webhook:", str(e))
-        return jsonify({"error": str(e)}),500
+        return jsonify({"error": str(e)}), 500
 
+# ==============================
+# Endpoint base per test
+# ==============================
 @app.route("/", methods=["GET"])
 def index():
-    return "Telegram Bot attivo ✅",200
+    return "Bot Telegram Webhook attivo ✅", 200
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
+# ==============================
+# Main (per test locale)
+# ==============================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
