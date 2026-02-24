@@ -79,17 +79,20 @@ def format_message(data):
             pass
 
         # Emoji per messaggi
-        emoji_open = "🚀📈" if side.upper() == "LONG" else "🔻📉"
+        emoji_open = {"start":"🚀", "end":"📈"} if side.upper() == "LONG" else {"start":"🔻", "end":"📉"}
         emoji_reversal = "🔄"
-        emoji_tp = "🟢🎯"
-        emoji_sl = "🔴🛑"
-        emoji_close = "⚡️"
+        emoji_tp = {"start":"🟢", "end":"🎯"}
+        emoji_sl = {"start":"🔴", "end":"🛑"}
+        emoji_close = {"start":"⚡️", "end":""}
 
         # Apertura trade
         if event in ["OPEN", "REVERSAL_OPEN"]:
-            emoji = emoji_reversal if event == "REVERSAL_OPEN" else emoji_open
+            if event == "REVERSAL_OPEN":
+                emoji_text = f"{emoji_reversal} {side.upper()}"
+            else:
+                emoji_text = f"{emoji_open['start']} {side.upper()} {emoji_open['end']}"
             message = (
-                f"{emoji} {side.upper()}\n"
+                f"{emoji_text}\n"
                 f"Pair: {symbol}\n"
                 f"Timeframe: {timeframe}\n"
                 f"Price: {entry}\n"
@@ -101,17 +104,21 @@ def format_message(data):
         # Chiusura trade
         elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
             if event == "TP_HIT":
-                emoji = emoji_tp
+                emoji_start = emoji_tp["start"]
+                emoji_end = emoji_tp["end"]
                 event_text = "TP HIT"
             elif event == "SL_HIT":
-                emoji = emoji_sl
+                emoji_start = emoji_sl["start"]
+                emoji_end = emoji_sl["end"]
                 event_text = "SL HIT"
             else:
-                emoji = emoji_close
+                emoji_start = emoji_close["start"]
+                emoji_end = emoji_close["end"]
                 event_text = "CLOSE"
 
             message = (
-                f"{emoji} {side.upper()} {event_text}\n"
+                f"{emoji_start} {event_text} {emoji_end}\n"
+                f"{side.upper()}\n"
                 f"Pair: {symbol}\n"
                 f"Timeframe: {timeframe}\n"
                 f"Entry: {entry}\n"
