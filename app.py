@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import html
+import time
 
 app = Flask(__name__)
 
@@ -17,6 +18,11 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
     raise ValueError("Assicurati di avere impostato TELEGRAM_TOKEN, CHAT_ID e WEBHOOK_SECRET su Render!")
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+
+# -----------------------
+# Stato segnali trend
+# -----------------------
+last_trend_signal = {}  # esempio: {'BTCUSDT': {'type': 'MIN', 'value': 25000, 'ts': 167676}}
 
 # -----------------------
 # Funzione invio Telegram
@@ -38,7 +44,6 @@ def send_telegram_message(text):
 
         print("Messaggio inviato correttamente:", r.json())
     except requests.exceptions.HTTPError as e:
-        # 🔹 Telegram ritorna dettagli dell'errore nel body
         print(f"Errore invio Telegram HTTP: {e.response.text}")
     except Exception as e:
         print(f"Errore invio Telegram generico: {e}")
@@ -79,11 +84,11 @@ def format_message(data):
         except:
             pass
 
-        # -----------------------
         # Apertura trade
-        # -----------------------
-        if event == "OPEN":
+        if event in ["OPEN", "REVERSAL_OPEN"]:
             emoji = "🚀" if side.upper() == "LONG" else "🔻"
+            if event == "REVERSAL_OPEN":
+                emoji = "🔄"  # Emoji per segnare reversal
             message = (
                 f"{emoji} {side.upper()}\n"
                 f"Pair: {symbol}\n"
@@ -94,9 +99,7 @@ def format_message(data):
             )
             return message
 
-        # -----------------------
         # Chiusura trade
-        # -----------------------
         elif event in ["TP_HIT", "SL_HIT"]:
             message = (
                 f"⚡ EXIT {side.upper()}\n"
@@ -107,40 +110,62 @@ def format_message(data):
 
         else:
             return f"{symbol}: {event}"
-
     else:
         return str(data)
 
 # -----------------------
-# Webhook POST
+# Webhook POST per trade (strategia)
 # -----------------------
-@app.route("/webhook", methods=["POST"])
-def webhook():
+@app.route("/webhook/trade", methods=["POST"])
+def trade_webhook():
     try:
-        raw_data = request.data
-        print("Raw body ricevuto:", raw_data)
+        data = request.json
+        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+            return "Invalid secret", 400
 
-        # Proviamo a parsare JSON
-        try:
-            data = json.loads(raw_data)
-            is_json = True
-        except Exception:
-            data = raw_data.decode("utf-8")
-            is_json = False
-            print("Non è JSON, invio testo grezzo:", data)
+        symbol = data.get("symbol")
 
-        # Controllo secret solo se JSON
-        if is_json:
-            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-                return "Invalid secret", 400
+        # Valuta eventuale trade reversal sulla base dei segnali trend
+        trend = last_trend_signal.get(symbol)
+        if trend:
+            if trend["type"] == "MIN" and data.get("side", "").upper() == "LONG":
+                data["event"] = "REVERSAL_OPEN"
+            elif trend["type"] == "MAX" and data.get("side", "").upper() == "SHORT":
+                data["event"] = "REVERSAL_OPEN"
 
         message = format_message(data)
         send_telegram_message(message)
-
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        print(f"Error in webhook: {e}")
+        print(f"Error in trade_webhook: {e}")
+        return "Internal Server Error", 500
+
+# -----------------------
+# Webhook POST per segnali trend (forza trend)
+# -----------------------
+@app.route("/webhook/trend", methods=["POST"])
+def trend_webhook():
+    try:
+        data = request.json
+        # Non controlliamo il secret per trend se vogliamo flessibilità interna
+        symbol = data.get("symbol")
+        event_type = data.get("event")  # MIN o MAX
+        value = data.get("value")
+
+        # Salva il segnale trend in memoria
+        last_trend_signal[symbol] = {
+            "type": event_type,
+            "value": value,
+            "ts": time.time()
+        }
+
+        # 🔹 Non invia messaggi Telegram per trend, solo aggiorna stato
+        print(f"Segnale trend ricevuto: {symbol} {event_type} a {value}")
+        return jsonify({"status":"ok"}), 200
+
+    except Exception as e:
+        print(f"Error in trend_webhook: {e}")
         return "Internal Server Error", 500
 
 # -----------------------
