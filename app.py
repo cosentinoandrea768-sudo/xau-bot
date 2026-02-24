@@ -27,9 +27,9 @@ last_trend_signal = {}  # es: {'BTCUSDT': {'type':'MIN', 'value':25000, 'ts': 16
 # -----------------------
 # Funzione invio Telegram
 # -----------------------
-def send_telegram_message(text: str):
+def send_telegram_message(text):
     try:
-        safe_text = html.escape(text)  # Escape HTML
+        safe_text = html.escape(text)
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
             "text": safe_text,
@@ -45,22 +45,16 @@ def send_telegram_message(text: str):
         print(f"Errore invio Telegram generico: {e}")
 
 # -----------------------
-# Helper per arrotondamenti sicuri
+# Funzione calcolo profit sul singolo trade
 # -----------------------
-def safe_round(val, digits=3):
-    try:
-        return f"{float(val):.{digits}f}"
-    except:
-        return val
-
 def format_profit(entry, exit_price, side):
     try:
         entry_f = float(entry)
         exit_f = float(exit_price)
         if side.upper() == "LONG":
-            profit = ((exit_f - entry_f) / entry_f) * 100
+            profit = (exit_f - entry_f) / entry_f * 100
         else:  # SHORT
-            profit = ((entry_f - exit_f) / entry_f) * 100
+            profit = (entry_f - exit_f) / entry_f * 100
         return f"{profit:.2f}%"
     except:
         return "-"
@@ -69,49 +63,88 @@ def format_profit(entry, exit_price, side):
 # Formatta messaggio trade
 # -----------------------
 def format_message(data):
-    if not isinstance(data, dict):
-        return str(data)
+    if isinstance(data, dict):
+        event = data.get("event", "")
+        symbol = data.get("symbol", "")
+        timeframe = data.get("timeframe", "")
+        side = data.get("side", "")
+        entry = data.get("entry", "N/A")
+        exit_price = data.get("exit", "N/A")
+        tp = data.get("tp", "N/A")
+        sl = data.get("sl", "N/A")
 
-    event = data.get("event", "")
-    symbol = data.get("symbol", "")
-    timeframe = data.get("timeframe", "")
-    side = data.get("side", "")
-    entry = safe_round(data.get("entry", "N/A"))
-    exit_price = safe_round(data.get("exit", "N/A"))
-    tp = safe_round(data.get("tp", "N/A"))
-    sl = safe_round(data.get("sl", "N/A"))
+        # Arrotondamenti
+        try:
+            entry = f"{float(entry):.3f}"
+        except: pass
+        try:
+            tp = f"{float(tp):.3f}"
+        except: pass
+        try:
+            sl = f"{float(sl):.3f}"
+        except: pass
+        try:
+            exit_price = f"{float(exit_price):.3f}"
+        except: pass
 
-    # Apertura trade
-    if event in ["OPEN", "REVERSAL_OPEN"]:
-        emoji = "🚀" if side.upper() == "LONG" else "🔻"
-        if event == "REVERSAL_OPEN":
-            emoji = "🔄"
-        message = (
-            f"{emoji} {side.upper()}\n"
-            f"Pair: {symbol}\n"
-            f"Timeframe: {timeframe}\n"
-            f"Price: {entry}\n"
-            f"TP: {tp}\n"
-            f"SL: {sl}"
-        )
-        return message
+        # Apertura trade
+        if event in ["OPEN", "REVERSAL_OPEN"]:
+            emoji = "🚀" if side.upper() == "LONG" else "🔻"
+            if event == "REVERSAL_OPEN":
+                emoji = "🔄"
+            message = (
+                f"{emoji} {side.upper()}\n"
+                f"Pair: {symbol}\n"
+                f"Timeframe: {timeframe}\n"
+                f"Price: {entry}\n"
+                f"TP: {tp}\n"
+                f"SL: {sl}"
+            )
+            return message
 
-    # Chiusura trade
-    elif event in ["TP_HIT", "SL_HIT"]:
-        profit = format_profit(entry, exit_price, side)
-        label = "TP HIT" if event == "TP_HIT" else "SL HIT"
-        message = (
-            f"⚡ {label} {side.upper()}\n"
-            f"Pair: {symbol}\n"
-            f"Timeframe: {timeframe}\n"
-            f"Entry: {entry}\n"
-            f"Exit: {exit_price}\n"
-            f"Profit: {profit}"
-        )
-        return message
+        # Chiusura trade
+        elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
+            # Determina TP o SL in caso di CLOSE
+            if event == "CLOSE":
+                try:
+                    entry_f = float(entry)
+                    exit_f = float(exit_price)
+                    tp_f = float(tp)
+                    sl_f = float(sl)
+                    if side.upper() == "LONG":
+                        if exit_f >= tp_f:
+                            label = "TP HIT"
+                        elif exit_f <= sl_f:
+                            label = "SL HIT"
+                        else:
+                            label = "CLOSE"
+                    else:  # SHORT
+                        if exit_f <= tp_f:
+                            label = "TP HIT"
+                        elif exit_f >= sl_f:
+                            label = "SL HIT"
+                        else:
+                            label = "CLOSE"
+                except:
+                    label = "CLOSE"
+            else:
+                label = "TP HIT" if event == "TP_HIT" else "SL HIT"
 
+            profit = format_profit(entry, exit_price, side)
+            message = (
+                f"⚡ {label} {side.upper()}\n"
+                f"Pair: {symbol}\n"
+                f"Timeframe: {timeframe}\n"
+                f"Entry: {entry}\n"
+                f"Exit: {exit_price}\n"
+                f"Profit: {profit}"
+            )
+            return message
+
+        else:
+            return f"{symbol}: {event}"
     else:
-        return f"{symbol}: {event}"
+        return str(data)
 
 # -----------------------
 # Webhook POST per trade (strategia)
@@ -149,13 +182,12 @@ def webhook():
         message = format_message(data)
         send_telegram_message(message)
         return jsonify({"status": "ok"}), 200
-
     except Exception as e:
         print(f"Error in webhook: {e}")
         return "Internal Server Error", 500
 
 # -----------------------
-# Webhook POST per segnali trend
+# Webhook POST per segnali trend (forza trend)
 # -----------------------
 @app.route("/webhook/trend", methods=["POST"])
 def trend_webhook():
@@ -165,7 +197,6 @@ def trend_webhook():
         event_type = data.get("event")  # MIN o MAX
         value = data.get("value")
 
-        # Salva il segnale trend in memoria
         last_trend_signal[symbol] = {
             "type": event_type,
             "value": value,
