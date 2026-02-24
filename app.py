@@ -1,51 +1,5 @@
-from flask import Flask, request, jsonify
-import requests
-import json
-import os
-import html
-import time
-
-app = Flask(__name__)
-
 # -----------------------
-# Variabili d'ambiente
-# -----------------------
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("CHAT_ID")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
-
-if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
-    raise ValueError("Assicurati di avere impostato TELEGRAM_TOKEN, CHAT_ID e WEBHOOK_SECRET su Render!")
-
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-
-# -----------------------
-# Stato segnali trend
-# -----------------------
-last_trend_signal = {}  # es: {'BTCUSDT': {'type':'MIN', 'value':25000, 'ts': 167676}}
-
-# -----------------------
-# Funzione invio Telegram
-# -----------------------
-def send_telegram_message(text):
-    try:
-        safe_text = html.escape(text)
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": safe_text,
-            "parse_mode": "HTML"
-        }
-        print("Invio payload Telegram:", payload)
-        r = requests.post(TELEGRAM_API_URL, json=payload, timeout=10)
-        r.raise_for_status()
-        print("Messaggio inviato correttamente:", r.json())
-    except requests.exceptions.HTTPError as e:
-        print(f"Errore invio Telegram HTTP: {e.response.text}")
-    except Exception as e:
-        print(f"Errore invio Telegram generico: {e}")
-
-# -----------------------
-# Formatta messaggio trade
+# Formatta messaggio trade con distanza in pips
 # -----------------------
 def format_message(data):
     if isinstance(data, dict):
@@ -57,29 +11,27 @@ def format_message(data):
         exit_price = data.get("exit", "N/A")
         tp = data.get("tp", "N/A")
         sl = data.get("sl", "N/A")
-        profit = data.get("profit_percent", "-")
+        profit_percent = data.get("profit_percent", "-")  # lo manteniamo per debug
 
         # Arrotondamenti numerici
-        try: entry = f"{float(entry):.3f}"
-        except: pass
+        try: entry_f = float(entry)
+        except: entry_f = None
+        try: exit_f = float(exit_price)
+        except: exit_f = None
         try: tp = f"{float(tp):.3f}"
         except: pass
         try: sl = f"{float(sl):.3f}"
         except: pass
-        try: exit_price = f"{float(exit_price):.3f}"
-        except: pass
 
-        # 🔹 Calcolo % sul singolo trade se presenti entry/exit
+        # 🔹 Calcolo distanza in pips sul singolo trade
+        profit_pips = "-"
         try:
-            e = float(entry)
-            x = float(exit_price)
-            if side.upper() == "LONG":
-                profit_f = ((x - e) / e) * 100
-            elif side.upper() == "SHORT":
-                profit_f = ((e - x) / e) * 100
-            else:
-                profit_f = float(profit)
-            profit = f"{profit_f:.2f}%"
+            if entry_f is not None and exit_f is not None:
+                if side.upper() == "LONG":
+                    profit_pips = exit_f - entry_f
+                elif side.upper() == "SHORT":
+                    profit_pips = entry_f - exit_f
+                profit_pips = f"{profit_pips:.2f} pips"
         except:
             pass
 
@@ -128,7 +80,7 @@ def format_message(data):
                 f"Timeframe: {timeframe}\n"
                 f"Entry: {entry}\n"
                 f"Exit: {exit_price}\n"
-                f"Profit: {profit}"
+                f"Profit: {profit_pips}"
             )
             return message
 
@@ -136,94 +88,3 @@ def format_message(data):
             return f"{symbol}: {event}"
     else:
         return str(data)
-
-# -----------------------
-# Webhook POST per trade (strategia)
-# -----------------------
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    try:
-        raw_data = request.data
-        print("Raw body ricevuto:", raw_data)
-
-        try:
-            data = json.loads(raw_data)
-            is_json = True
-        except Exception:
-            data = raw_data.decode("utf-8")
-            is_json = False
-            print("Non è JSON, invio testo grezzo:", data)
-
-        if is_json:
-            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-                return "Invalid secret", 400
-
-        # Logica reversal basata sui segnali trend
-        if isinstance(data, dict):
-            symbol = data.get("symbol")
-            trend = last_trend_signal.get(symbol)
-            if trend:
-                side = data.get("side", "").upper()
-                if trend["type"] == "MIN" and side == "LONG":
-                    data["event"] = "REVERSAL_OPEN"
-                elif trend["type"] == "MAX" and side == "SHORT":
-                    data["event"] = "REVERSAL_OPEN"
-
-        # 🔹 Aggiorniamo la percentuale corretta sul singolo trade lato server
-        if isinstance(data, dict):
-            try:
-                e = float(data.get("entry"))
-                x = float(data.get("exit"))
-                side = data.get("side", "").upper()
-                if side == "LONG":
-                    data["profit_percent"] = str(((x - e) / e) * 100)
-                elif side == "SHORT":
-                    data["profit_percent"] = str(((e - x) / e) * 100)
-            except:
-                pass
-
-        message = format_message(data)
-        send_telegram_message(message)
-
-        return jsonify({"status": "ok"}), 200
-    except Exception as e:
-        print(f"Error in webhook: {e}")
-        return "Internal Server Error", 500
-
-# -----------------------
-# Webhook POST per segnali trend (forza trend)
-# -----------------------
-@app.route("/webhook/trend", methods=["POST"])
-def trend_webhook():
-    try:
-        data = request.json
-        symbol = data.get("symbol")
-        event_type = data.get("event")  # MIN o MAX
-        value = data.get("value")
-
-        last_trend_signal[symbol] = {
-            "type": event_type,
-            "value": value,
-            "ts": time.time()
-        }
-
-        print(f"Segnale trend ricevuto: {symbol} {event_type} a {value}")
-        return jsonify({"status":"ok"}), 200
-    except Exception as e:
-        print(f"Error in trend_webhook: {e}")
-        return "Internal Server Error", 500
-
-# -----------------------
-# Endpoint GET per UptimeRobot
-# -----------------------
-@app.route("/", methods=["GET"])
-def uptime():
-    print("Ping UptimeRobot ricevuto su /")
-    return "Bot online ✅", 200
-
-# -----------------------
-# Avvio app
-# -----------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
