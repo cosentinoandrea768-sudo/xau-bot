@@ -45,21 +45,6 @@ def send_telegram_message(text):
         print(f"Errore invio Telegram generico: {e}")
 
 # -----------------------
-# Funzione calcolo profit sul singolo trade
-# -----------------------
-def format_profit(entry, exit_price, side):
-    try:
-        entry_f = float(entry)
-        exit_f = float(exit_price)
-        if side.upper() == "LONG":
-            profit = (exit_f - entry_f) / entry_f * 100
-        else:  # SHORT
-            profit = (entry_f - exit_f) / entry_f * 100
-        return f"{profit:.2f}%"
-    except:
-        return "-"
-
-# -----------------------
 # Formatta messaggio trade
 # -----------------------
 def format_message(data):
@@ -72,26 +57,37 @@ def format_message(data):
         exit_price = data.get("exit", "N/A")
         tp = data.get("tp", "N/A")
         sl = data.get("sl", "N/A")
+        profit = data.get("profit_percent", "-")
 
-        # Arrotondamenti
-        try:
-            entry = f"{float(entry):.3f}"
+        # Arrotondamenti numerici
+        try: entry = f"{float(entry):.3f}"
         except: pass
-        try:
-            tp = f"{float(tp):.3f}"
+        try: tp = f"{float(tp):.3f}"
         except: pass
-        try:
-            sl = f"{float(sl):.3f}"
+        try: sl = f"{float(sl):.3f}"
         except: pass
-        try:
-            exit_price = f"{float(exit_price):.3f}"
+        try: exit_price = f"{float(exit_price):.3f}"
         except: pass
+
+        # Correzione profit percent sul singolo trade
+        try:
+            profit_f = float(profit)
+            if side.upper() == "SHORT":
+                profit_f = -profit_f  # invertiamo logica per SHORT
+            profit = f"{profit_f:.2f}%"
+        except:
+            pass
+
+        # Emoji per messaggi
+        emoji_open = "🚀📈" if side.upper() == "LONG" else "🔻📉"
+        emoji_reversal = "🔄"
+        emoji_tp = "🟢🎯"
+        emoji_sl = "🔴🛑"
+        emoji_close = "⚡️"
 
         # Apertura trade
         if event in ["OPEN", "REVERSAL_OPEN"]:
-            emoji = "🚀" if side.upper() == "LONG" else "🔻"
-            if event == "REVERSAL_OPEN":
-                emoji = "🔄"
+            emoji = emoji_reversal if event == "REVERSAL_OPEN" else emoji_open
             message = (
                 f"{emoji} {side.upper()}\n"
                 f"Pair: {symbol}\n"
@@ -104,35 +100,18 @@ def format_message(data):
 
         # Chiusura trade
         elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
-            # Determina TP o SL in caso di CLOSE
-            if event == "CLOSE":
-                try:
-                    entry_f = float(entry)
-                    exit_f = float(exit_price)
-                    tp_f = float(tp)
-                    sl_f = float(sl)
-                    if side.upper() == "LONG":
-                        if exit_f >= tp_f:
-                            label = "TP HIT"
-                        elif exit_f <= sl_f:
-                            label = "SL HIT"
-                        else:
-                            label = "CLOSE"
-                    else:  # SHORT
-                        if exit_f <= tp_f:
-                            label = "TP HIT"
-                        elif exit_f >= sl_f:
-                            label = "SL HIT"
-                        else:
-                            label = "CLOSE"
-                except:
-                    label = "CLOSE"
+            if event == "TP_HIT":
+                emoji = emoji_tp
+                event_text = "TP HIT"
+            elif event == "SL_HIT":
+                emoji = emoji_sl
+                event_text = "SL HIT"
             else:
-                label = "TP HIT" if event == "TP_HIT" else "SL HIT"
+                emoji = emoji_close
+                event_text = "CLOSE"
 
-            profit = format_profit(entry, exit_price, side)
             message = (
-                f"⚡ {label} {side.upper()}\n"
+                f"{emoji} {side.upper()} {event_text}\n"
                 f"Pair: {symbol}\n"
                 f"Timeframe: {timeframe}\n"
                 f"Entry: {entry}\n"
@@ -163,7 +142,6 @@ def webhook():
             is_json = False
             print("Non è JSON, invio testo grezzo:", data)
 
-        # Controllo secret solo se JSON
         if is_json:
             if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
                 return "Invalid secret", 400
@@ -181,6 +159,7 @@ def webhook():
 
         message = format_message(data)
         send_telegram_message(message)
+
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         print(f"Error in webhook: {e}")
