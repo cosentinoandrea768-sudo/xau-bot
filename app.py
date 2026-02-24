@@ -8,7 +8,7 @@ import time
 # -----------------------
 # Flask app WSGI compatibile
 # -----------------------
-application = Flask(__name__)  # <- qui il nome "application" per Gunicorn/Render
+application = Flask(__name__)
 
 # -----------------------
 # Variabili d'ambiente
@@ -18,14 +18,14 @@ TELEGRAM_CHAT_ID = os.environ.get("CHAT_ID")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
 if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
-    raise ValueError("Assicurati di avere impostato TELEGRAM_TOKEN, CHAT_ID e WEBHOOK_SECRET su Render!")
+    raise ValueError("Assicurati di avere impostato TELEGRAM_TOKEN, CHAT_ID e WEBHOOK_SECRET!")
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # -----------------------
 # Stato segnali trend
 # -----------------------
-last_trend_signal = {}  # es: {'BTCUSDT': {'type':'MIN', 'value':25000, 'ts': 167676}}
+last_trend_signal = {}
 
 # -----------------------
 # Funzione invio Telegram
@@ -38,160 +38,152 @@ def send_telegram_message(text):
             "text": safe_text,
             "parse_mode": "HTML"
         }
-        print("Invio payload Telegram:", payload)
         r = requests.post(TELEGRAM_API_URL, json=payload, timeout=10)
         r.raise_for_status()
-        print("Messaggio inviato correttamente:", r.json())
-    except requests.exceptions.HTTPError as e:
-        print(f"Errore invio Telegram HTTP: {e.response.text}")
+        print("Messaggio inviato:", r.json())
     except Exception as e:
-        print(f"Errore invio Telegram generico: {e}")
+        print(f"Errore invio Telegram: {e}")
 
 # -----------------------
 # Formatta messaggio trade
 # -----------------------
 def format_message(data):
-    if isinstance(data, dict):
-        event = data.get("event", "")
-        symbol = data.get("symbol", "")
-        timeframe = data.get("timeframe", "")
-        side = data.get("side", "")
-        entry = data.get("entry", "N/A")
-        exit_price = data.get("exit", "N/A")
-        tp = data.get("tp", "N/A")
-        sl = data.get("sl", "N/A")
-        profit = data.get("profit_percent", "-")
 
-        # Arrotondamenti numerici
-        try: entry = f"{float(entry):.3f}"
-        except: pass
-        try: tp = f"{float(tp):.3f}"
-        except: pass
-        try: sl = f"{float(sl):.3f}"
-        except: pass
-        try: exit_price = f"{float(exit_price):.3f}"
-        except: pass
-
-        # Calcolo pips
-        try:
-            pips = abs(float(exit_price) - float(entry))
-            pips = round(pips, 2)
-        except:
-            pips = "N/A"
-
-        # Correzione profit percent sul singolo trade
-        try:
-            profit_f = float(profit)
-            if side.upper() == "SHORT":
-                profit_f = -profit_f  # invertiamo logica per SHORT
-            profit = f"{profit_f:.2f}%"
-        except:
-            pass
-
-        # Emoji per messaggi
-        emoji_open = {"start":"🚀", "end":"📈"} if side.upper() == "LONG" else {"start":"🔻", "end":"📉"}
-        emoji_reversal = "🔄"
-        emoji_tp = {"start":"🟢", "end":"🎯"}
-        emoji_sl = {"start":"🔴", "end":"🛑"}
-        emoji_close = {"start":"⚡️", "end":""}
-
-        # Apertura trade
-        if event in ["OPEN", "REVERSAL_OPEN"]:
-            if event == "REVERSAL_OPEN":
-                emoji_text = f"{emoji_reversal} {side.upper()}"
-            else:
-                emoji_text = f"{emoji_open['start']} {side.upper()} {emoji_open['end']}"
-            message = (
-                f"{emoji_text}\n"
-                f"Pair: {symbol}\n"
-                f"Timeframe: {timeframe}\n"
-                f"Price: {entry}\n"
-                f"TP: {tp}\n"
-                f"SL: {sl}"
-            )
-            return message
-
-        # Chiusura trade
-        elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
-            if event == "TP_HIT":
-                emoji_start = emoji_tp["start"]
-                emoji_end = emoji_tp["end"]
-                event_text = "TP HIT"
-            elif event == "SL_HIT":
-                emoji_start = emoji_sl["start"]
-                emoji_end = emoji_sl["end"]
-                event_text = "SL HIT"
-            else:
-                emoji_start = emoji_close["start"]
-                emoji_end = emoji_close["end"]
-                event_text = "CLOSE"
-
-            message = (
-                f"{emoji_start} {event_text} {emoji_end}\n"
-                f"{side.upper()}\n"
-                f"Pair: {symbol}\n"
-                f"Timeframe: {timeframe}\n"
-                f"Entry: {entry}\n"
-                f"Exit: {exit_price}\n"
-                f"Profit: {profit}\n"
-                f"Pips: {pips}"
-            )
-            return message
-
-        else:
-            return f"{symbol}: {event}"
-    else:
+    if not isinstance(data, dict):
         return str(data)
 
+    event = data.get("event", "")
+    symbol = data.get("symbol", "")
+    timeframe = data.get("timeframe", "")
+    side = data.get("side", "").upper()
+    entry = data.get("entry")
+    exit_price = data.get("exit")
+    tp = data.get("tp")
+    sl = data.get("sl")
+
+    # Conversioni numeriche sicure
+    try: entry = float(entry)
+    except: entry = None
+    try: exit_price = float(exit_price)
+    except: exit_price = None
+    try: tp = float(tp)
+    except: tp = None
+    try: sl = float(sl)
+    except: sl = None
+
+    # ---------------- CALCOLO PIPS ----------------
+    pips_value = None
+
+    if entry is not None and exit_price is not None:
+
+        if side == "LONG":
+            pips_value = exit_price - entry
+        elif side == "SHORT":
+            pips_value = entry - exit_price
+        else:
+            pips_value = exit_price - entry
+
+        pips_value = round(pips_value, 2)
+
+    # Formattazione con + solo su TP
+    if pips_value is not None:
+        if event == "TP_HIT":
+            pips_text = f"+{abs(pips_value):.2f} pips"
+        elif event == "SL_HIT":
+            pips_text = f"-{abs(pips_value):.2f} pips"
+        else:
+            pips_text = f"{pips_value:.2f} pips"
+    else:
+        pips_text = "N/A"
+
+    # ---------------- EMOJI ----------------
+    emoji_open = "🚀" if side == "LONG" else "🔻"
+    emoji_tp = "🟢"
+    emoji_sl = "🔴"
+    emoji_close = "⚡️"
+    emoji_reversal = "🔄"
+
+    # ---------------- APERTURA ----------------
+    if event in ["OPEN", "REVERSAL_OPEN"]:
+
+        if event == "REVERSAL_OPEN":
+            header = f"{emoji_reversal} REVERSAL {side}"
+        else:
+            header = f"{emoji_open} {side}"
+
+        return (
+            f"{header}\n"
+            f"Pair: {symbol}\n"
+            f"Timeframe: {timeframe}\n"
+            f"Entry: {entry}\n"
+            f"TP: {tp}\n"
+            f"SL: {sl}"
+        )
+
+    # ---------------- CHIUSURA ----------------
+    elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
+
+        if event == "TP_HIT":
+            header = f"{emoji_tp} TP HIT"
+        elif event == "SL_HIT":
+            header = f"{emoji_sl} SL HIT"
+        else:
+            header = f"{emoji_close} CLOSE"
+
+        return (
+            f"{header}\n"
+            f"{side}\n"
+            f"Pair: {symbol}\n"
+            f"Timeframe: {timeframe}\n"
+            f"Entry: {entry}\n"
+            f"Exit: {exit_price}\n"
+            f"Profit: {pips_text}"
+        )
+
+    # ---------------- ALTRO ----------------
+    return f"{symbol}: {event}"
+
 # -----------------------
-# Webhook POST per trade (strategia)
+# Webhook principale
 # -----------------------
 @application.route("/webhook", methods=["POST"])
 def webhook():
     try:
         raw_data = request.data
-        print("Raw body ricevuto:", raw_data)
+        data = json.loads(raw_data)
 
-        try:
-            data = json.loads(raw_data)
-            is_json = True
-        except Exception:
-            data = raw_data.decode("utf-8")
-            is_json = False
-            print("Non è JSON, invio testo grezzo:", data)
+        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+            return "Invalid secret", 400
 
-        if is_json:
-            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-                return "Invalid secret", 400
+        # Logica reversal
+        symbol = data.get("symbol")
+        trend = last_trend_signal.get(symbol)
 
-        # Logica reversal basata sui segnali trend
-        if isinstance(data, dict):
-            symbol = data.get("symbol")
-            trend = last_trend_signal.get(symbol)
-            if trend:
-                side = data.get("side", "").upper()
-                if trend["type"] == "MIN" and side == "LONG":
-                    data["event"] = "REVERSAL_OPEN"
-                elif trend["type"] == "MAX" and side == "SHORT":
-                    data["event"] = "REVERSAL_OPEN"
+        if trend:
+            side = data.get("side", "").upper()
+            if trend["type"] == "MIN" and side == "LONG":
+                data["event"] = "REVERSAL_OPEN"
+            elif trend["type"] == "MAX" and side == "SHORT":
+                data["event"] = "REVERSAL_OPEN"
 
         message = format_message(data)
         send_telegram_message(message)
 
         return jsonify({"status": "ok"}), 200
+
     except Exception as e:
-        print(f"Error in webhook: {e}")
+        print("Errore webhook:", e)
         return "Internal Server Error", 500
 
 # -----------------------
-# Webhook POST per segnali trend (forza trend)
+# Webhook trend
 # -----------------------
 @application.route("/webhook/trend", methods=["POST"])
 def trend_webhook():
     try:
         data = request.json
         symbol = data.get("symbol")
-        event_type = data.get("event")  # MIN o MAX
+        event_type = data.get("event")
         value = data.get("value")
 
         last_trend_signal[symbol] = {
@@ -200,22 +192,21 @@ def trend_webhook():
             "ts": time.time()
         }
 
-        print(f"Segnale trend ricevuto: {symbol} {event_type} a {value}")
-        return jsonify({"status":"ok"}), 200
+        return jsonify({"status": "ok"}), 200
+
     except Exception as e:
-        print(f"Error in trend_webhook: {e}")
+        print("Errore trend webhook:", e)
         return "Internal Server Error", 500
 
 # -----------------------
-# Endpoint GET per UptimeRobot
+# Endpoint uptime
 # -----------------------
 @application.route("/", methods=["GET"])
 def uptime():
-    print("Ping UptimeRobot ricevuto su /")
     return "Bot online ✅", 200
 
 # -----------------------
-# Avvio app
+# Avvio
 # -----------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
