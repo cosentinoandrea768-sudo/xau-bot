@@ -69,11 +69,16 @@ def format_message(data):
         try: exit_price = f"{float(exit_price):.3f}"
         except: pass
 
-        # Correzione profit percent sul singolo trade
+        # 🔹 Calcolo % sul singolo trade se presenti entry/exit
         try:
-            profit_f = float(profit)
-            if side.upper() == "SHORT":
-                profit_f = -profit_f  # invertiamo logica per SHORT
+            e = float(entry)
+            x = float(exit_price)
+            if side.upper() == "LONG":
+                profit_f = ((x - e) / e) * 100
+            elif side.upper() == "SHORT":
+                profit_f = ((e - x) / e) * 100
+            else:
+                profit_f = float(profit)
             profit = f"{profit_f:.2f}%"
         except:
             pass
@@ -163,6 +168,19 @@ def webhook():
                     data["event"] = "REVERSAL_OPEN"
                 elif trend["type"] == "MAX" and side == "SHORT":
                     data["event"] = "REVERSAL_OPEN"
+
+        # 🔹 Aggiorniamo la percentuale corretta sul singolo trade lato server
+        if isinstance(data, dict):
+            try:
+                e = float(data.get("entry"))
+                x = float(data.get("exit"))
+                side = data.get("side", "").upper()
+                if side == "LONG":
+                    data["profit_percent"] = str(((x - e) / e) * 100)
+                elif side == "SHORT":
+                    data["profit_percent"] = str(((e - x) / e) * 100)
+            except:
+                pass
 
         message = format_message(data)
         send_telegram_message(message)
