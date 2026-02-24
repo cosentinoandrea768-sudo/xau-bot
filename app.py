@@ -61,21 +61,20 @@ def format_message(data):
     tp = data.get("tp")
     sl = data.get("sl")
 
-    # Conversioni numeriche sicure
-    try: entry = float(entry)
+    # Conversioni numeriche
+    try: entry = round(float(entry), 2)
     except: entry = None
-    try: exit_price = float(exit_price)
+    try: exit_price = round(float(exit_price), 2)
     except: exit_price = None
-    try: tp = float(tp)
+    try: tp = round(float(tp), 2)
     except: tp = None
-    try: sl = float(sl)
+    try: sl = round(float(sl), 2)
     except: sl = None
 
     # ---------------- CALCOLO PIPS ----------------
     pips_value = None
 
     if entry is not None and exit_price is not None:
-
         if side == "LONG":
             pips_value = exit_price - entry
         elif side == "SHORT":
@@ -85,7 +84,7 @@ def format_message(data):
 
         pips_value = round(pips_value, 2)
 
-    # Formattazione con + solo su TP
+    # Formattazione pips
     if pips_value is not None:
         if event == "TP_HIT":
             pips_text = f"+{abs(pips_value):.2f} pips"
@@ -115,9 +114,9 @@ def format_message(data):
             f"{header}\n"
             f"Pair: {symbol}\n"
             f"Timeframe: {timeframe}\n"
-            f"Entry: {entry}\n"
-            f"TP: {tp}\n"
-            f"SL: {sl}"
+            f"Entry: {entry:.2f}\n"
+            f"TP: {tp:.2f}\n"
+            f"SL: {sl:.2f}"
         )
 
     # ---------------- CHIUSURA ----------------
@@ -135,12 +134,11 @@ def format_message(data):
             f"{side}\n"
             f"Pair: {symbol}\n"
             f"Timeframe: {timeframe}\n"
-            f"Entry: {entry}\n"
-            f"Exit: {exit_price}\n"
+            f"Entry: {entry:.2f}\n"
+            f"Exit: {exit_price:.2f}\n"
             f"Profit: {pips_text}"
         )
 
-    # ---------------- ALTRO ----------------
     return f"{symbol}: {event}"
 
 # -----------------------
