@@ -1,41 +1,93 @@
 from flask import Flask, request, jsonify
+import telegram
+import os
 
 app = Flask(__name__)
 
-# Secret che deve coincidere con quello nel Pine Script
+# -----------------------
+# Configura bot Telegram
+# -----------------------
+TELEGRAM_TOKEN = "IL_TUO_BOT_TOKEN"
+TELEGRAM_CHAT_ID = "IL_TUO_CHAT_ID"
+
+bot = telegram.Bot(token=TELEGRAM_TOKEN)
+
+# -----------------------
+# Secret per il webhook
+# -----------------------
 WEBHOOK_SECRET = "93ksk2kdk239dk"
 
+# -----------------------
+# Funzione per inviare messaggio Telegram
+# -----------------------
+def send_telegram_message(text):
+    try:
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text)
+    except Exception as e:
+        print(f"Errore invio Telegram: {e}")
+
+# -----------------------
+# Funzione per formattare JSON in messaggio leggibile
+# -----------------------
+def format_message(data):
+    event = data.get("event", "")
+    symbol = data.get("symbol", "")
+    timeframe = data.get("timeframe", "")
+    side = data.get("side", "")
+    entry = data.get("entry", "N/A")
+    exit_price = data.get("exit", "N/A")
+    tp = data.get("tp", "N/A")
+    sl = data.get("sl", "N/A")
+    profit = data.get("profit_percent", "-")
+    
+    if profit in [None, "null"]:
+        profit = "-"
+    
+    if exit_price in [None, "null"]:
+        exit_price = "-"
+    
+    emoji = "✅" if event == "OPEN" else ("🎯" if "TP" in event else "🛑")
+    
+    message = f"{emoji} {event}\nSymbol: {symbol}\nTimeframe: {timeframe}\nSide: {side}\nEntry: {entry}\nExit: {exit_price}\nTP: {tp}\nSL: {sl}\nProfit %: {profit}"
+    return message
+
+# -----------------------
+# Endpoint webhook
+# -----------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        data = request.get_json(force=True)  # forza parsing JSON
+        data = request.get_json(force=True)
         if not data:
             return "No JSON received", 400
 
-        # Controlla il secret
+        # Controllo secret
         if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
             return "Invalid secret", 400
 
-        # Estrai i campi dal JSON
-        event = data.get("event")
-        symbol = data.get("symbol")
-        timeframe = data.get("timeframe")
-        side = data.get("side")
-        entry = float(data.get("entry", 0))
-        exit_price = float(data.get("exit", 0)) if data.get("exit") not in [None, "null"] else None
-        tp = float(data.get("tp", 0))
-        sl = float(data.get("sl", 0))
-        profit_percent = float(data.get("profit_percent", 0)) if data.get("profit_percent") not in [None, "null"] else None
+        # Gestione campi numerici, convertendo 'null' o None
+        entry = data.get("entry", "N/A")
+        exit_price = data.get("exit", "N/A")
+        tp = data.get("tp", "N/A")
+        sl = data.get("sl", "N/A")
+        profit_percent = data.get("profit_percent", "-")
 
-        # Qui puoi aggiungere la logica per il tuo bot Telegram o altri processi
-        print(f"Webhook received: {event} {side} {symbol} entry={entry} tp={tp} sl={sl} profit={profit_percent}")
+        # Log su server
+        print(f"Webhook ricevuto: {data}")
+
+        # Formatta e invia messaggio su Telegram
+        message = format_message(data)
+        send_telegram_message(message)
 
         return jsonify({"status": "ok"}), 200
 
     except Exception as e:
-        # Log dell'errore per debug
         print(f"Error in webhook: {e}")
         return "Internal Server Error", 500
 
+# -----------------------
+# Avvio app
+# -----------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
