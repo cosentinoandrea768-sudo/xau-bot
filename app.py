@@ -6,16 +6,16 @@ import os
 app = Flask(__name__)
 
 # -----------------------
-# Configura bot Telegram
+# Legge le variabili d'ambiente di Render
 # -----------------------
-TELEGRAM_TOKEN = "IL_TUO_BOT_TOKEN"
-TELEGRAM_CHAT_ID = "IL_TUO_CHAT_ID"
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("CHAT_ID")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
-# -----------------------
-# Secret per il webhook
-# -----------------------
-WEBHOOK_SECRET = "93ksk2kdk239dk"
+if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
+    raise ValueError("Assicurati di avere impostato TELEGRAM_TOKEN, CHAT_ID e WEBHOOK_SECRET su Render!")
+
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # -----------------------
 # Funzione per inviare messaggio Telegram
