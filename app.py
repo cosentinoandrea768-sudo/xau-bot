@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import os
+import html
 
 app = Flask(__name__)
 
@@ -21,16 +22,26 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 # Funzione invio Telegram
 # -----------------------
 def send_telegram_message(text):
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML"
-    }
     try:
+        # 🔹 Escape HTML per evitare 400 Bad Request
+        safe_text = html.escape(text)
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": safe_text,
+            "parse_mode": "HTML"
+        }
+
+        print("Invio payload Telegram:", payload)
         r = requests.post(TELEGRAM_API_URL, json=payload, timeout=10)
         r.raise_for_status()
+
+        print("Messaggio inviato correttamente:", r.json())
+    except requests.exceptions.HTTPError as e:
+        # 🔹 Telegram ritorna dettagli dell'errore nel body
+        print(f"Errore invio Telegram HTTP: {e.response.text}")
     except Exception as e:
-        print(f"Errore invio Telegram: {e}")
+        print(f"Errore invio Telegram generico: {e}")
 
 # -----------------------
 # Formatta messaggio trade
@@ -47,7 +58,7 @@ def format_message(data):
         sl = data.get("sl", "N/A")
         profit = data.get("profit_percent", "-")
 
-        # Arrotondamenti (come tuo originale, solo più precisi)
+        # Arrotondamenti
         try:
             entry = f"{float(entry):.3f}"
         except:
@@ -62,21 +73,17 @@ def format_message(data):
             pass
         try:
             profit_f = float(profit)
-
-            # 🔥 FIX DEFINITIVO SHORT → SEMPRE POSITIVO
             if side.upper() == "SHORT":
                 profit_f = abs(profit_f)
-
             profit = f"{profit_f:.2f}%"
         except:
             pass
 
         # -----------------------
-        # Apertura trade (IDENTICO SCREEN)
+        # Apertura trade
         # -----------------------
         if event == "OPEN":
             emoji = "🚀" if side.upper() == "LONG" else "🔻"
-
             message = (
                 f"{emoji} {side.upper()}\n"
                 f"Pair: {symbol}\n"
@@ -88,10 +95,9 @@ def format_message(data):
             return message
 
         # -----------------------
-        # Chiusura trade (IDENTICO SCREEN)
+        # Chiusura trade
         # -----------------------
         elif event in ["TP_HIT", "SL_HIT"]:
-
             message = (
                 f"⚡ EXIT {side.upper()}\n"
                 f"Pair: {symbol}\n"
