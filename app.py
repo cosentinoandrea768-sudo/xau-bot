@@ -36,25 +36,30 @@ def send_telegram_message(text):
 # Funzione per formattare JSON in messaggio leggibile
 # -----------------------
 def format_message(data):
-    event = data.get("event", "")
-    symbol = data.get("symbol", "")
-    timeframe = data.get("timeframe", "")
-    side = data.get("side", "")
-    entry = data.get("entry", "N/A")
-    exit_price = data.get("exit", "N/A")
-    tp = data.get("tp", "N/A")
-    sl = data.get("sl", "N/A")
-    profit = data.get("profit_percent", "-")
-    
-    if profit in [None, "null"]:
-        profit = "-"
-    if exit_price in [None, "null"]:
-        exit_price = "-"
-    
-    emoji = "✅" if event == "OPEN" else ("🎯" if "TP" in event else "🛑")
-    
-    message = f"{emoji} {event}\nSymbol: {symbol}\nTimeframe: {timeframe}\nSide: {side}\nEntry: {entry}\nExit: {exit_price}\nTP: {tp}\nSL: {sl}\nProfit %: {profit}"
-    return message
+    if isinstance(data, dict):
+        # JSON come prima
+        event = data.get("event", "")
+        symbol = data.get("symbol", "")
+        timeframe = data.get("timeframe", "")
+        side = data.get("side", "")
+        entry = data.get("entry", "N/A")
+        exit_price = data.get("exit", "N/A")
+        tp = data.get("tp", "N/A")
+        sl = data.get("sl", "N/A")
+        profit = data.get("profit_percent", "-")
+        
+        if profit in [None, "null"]:
+            profit = "-"
+        if exit_price in [None, "null"]:
+            exit_price = "-"
+        
+        emoji = "✅" if event == "OPEN" else ("🎯" if "TP" in event else "🛑")
+        
+        message = f"{emoji} {event}\nSymbol: {symbol}\nTimeframe: {timeframe}\nSide: {side}\nEntry: {entry}\nExit: {exit_price}\nTP: {tp}\nSL: {sl}\nProfit %: {profit}"
+        return message
+    else:
+        # Se non è JSON, manda il testo così com’è
+        return f"📩 Messaggio ricevuto:\n{data}"
 
 # -----------------------
 # Endpoint webhook POST
@@ -62,24 +67,23 @@ def format_message(data):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        # Legge raw body per debug
         raw_data = request.data
         print("Raw body ricevuto:", raw_data)
 
-        # Prova a parsare il JSON
+        # Proviamo a parsare JSON
         try:
             data = json.loads(raw_data)
-        except Exception as e:
-            print(f"Errore parsing JSON: {e}")
-            return "Invalid JSON", 400
+        except Exception:
+            # Non JSON → usiamo il testo grezzo
+            data = raw_data.decode("utf-8")
+            print("Non è JSON, invio testo grezzo:", data)
 
-        print("JSON parsato:", data)
+        # Se è JSON, controllo il secret
+        if isinstance(data, dict):
+            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+                return "Invalid secret", 400
 
-        # Controllo secret
-        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-            return "Invalid secret", 400
-
-        # Formatta e invia messaggio su Telegram
+        # Invia messaggio su Telegram
         message = format_message(data)
         send_telegram_message(message)
 
