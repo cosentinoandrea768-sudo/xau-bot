@@ -52,7 +52,7 @@ def format_message(data):
     return message
 
 # -----------------------
-# Endpoint webhook
+# Endpoint webhook POST
 # -----------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -64,13 +64,6 @@ def webhook():
         # Controllo secret
         if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
             return "Invalid secret", 400
-
-        # Gestione campi numerici, convertendo 'null' o None
-        entry = data.get("entry", "N/A")
-        exit_price = data.get("exit", "N/A")
-        tp = data.get("tp", "N/A")
-        sl = data.get("sl", "N/A")
-        profit_percent = data.get("profit_percent", "-")
 
         # Log su server
         print(f"Webhook ricevuto: {data}")
@@ -84,6 +77,13 @@ def webhook():
     except Exception as e:
         print(f"Error in webhook: {e}")
         return "Internal Server Error", 500
+
+# -----------------------
+# Endpoint GET per UptimeRobot
+# -----------------------
+@app.route("/", methods=["GET"])
+def uptime():
+    return "Bot online ✅", 200
 
 # -----------------------
 # Avvio app
