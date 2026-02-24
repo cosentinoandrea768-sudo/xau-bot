@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 
 # -----------------------
-# Legge le variabili d'ambiente di Render
+# Variabili d'ambiente
 # -----------------------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("CHAT_ID")
@@ -18,7 +18,7 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # -----------------------
-# Funzione per inviare messaggio Telegram
+# Funzione invio Telegram
 # -----------------------
 def send_telegram_message(text):
     payload = {
@@ -33,57 +33,87 @@ def send_telegram_message(text):
         print(f"Errore invio Telegram: {e}")
 
 # -----------------------
-# Funzione per formattare JSON in messaggio leggibile
+# Formatta messaggio trade
 # -----------------------
 def format_message(data):
-    if isinstance(data, dict):
-        # JSON come prima
-        event = data.get("event", "")
-        symbol = data.get("symbol", "")
-        timeframe = data.get("timeframe", "")
-        side = data.get("side", "")
-        entry = data.get("entry", "N/A")
-        exit_price = data.get("exit", "N/A")
-        tp = data.get("tp", "N/A")
-        sl = data.get("sl", "N/A")
-        profit = data.get("profit_percent", "-")
-        
-        if profit in [None, "null"]:
-            profit = "-"
-        if exit_price in [None, "null"]:
-            exit_price = "-"
-        
-        emoji = "✅" if event == "OPEN" else ("🎯" if "TP" in event else "🛑")
-        
-        message = f"{emoji} {event}\nSymbol: {symbol}\nTimeframe: {timeframe}\nSide: {side}\nEntry: {entry}\nExit: {exit_price}\nTP: {tp}\nSL: {sl}\nProfit %: {profit}"
+    event = data.get("event", "")
+    symbol = data.get("symbol", "")
+    timeframe = data.get("timeframe", "")
+    side = data.get("side", "")
+    entry = data.get("entry", "N/A")
+    exit_price = data.get("exit", "N/A")
+    tp = data.get("tp", "N/A")
+    sl = data.get("sl", "N/A")
+    profit = data.get("profit_percent", "-")
+
+    # Arrotondamenti
+    try:
+        entry_f = float(entry)
+        entry = f"{entry_f:.2f}"
+    except:
+        pass
+    try:
+        exit_f = float(exit_price)
+        exit_price = f"{exit_f:.2f}"
+    except:
+        pass
+    try:
+        tp_f = float(tp)
+        tp = f"{tp_f:.2f}"
+    except:
+        pass
+    try:
+        sl_f = float(sl)
+        sl = f"{sl_f:.2f}"
+    except:
+        pass
+    try:
+        profit_f = float(profit)
+        profit = f"{profit_f:.2f}%"
+    except:
+        pass
+
+    # Messaggio apertura trade
+    if event == "OPEN":
+        if side.upper() == "LONG":
+            emoji = "🚀"
+        elif side.upper() == "SHORT":
+            emoji = "🔻"
+        message = f"{emoji} {symbol} {timeframe}m\nEntry: {entry}\nTP: {tp}\nSL: {sl}"
         return message
+
+    # Messaggio chiusura trade
+    elif "TP" in event or "SL" in event:
+        exit_type = "Exit Long" if side.upper() == "LONG" else "Exit Short"
+        # Per short, profit percentuale positiva se profitto
+        try:
+            profit_f = float(profit)
+            if side.upper() == "SHORT":
+                profit_f = abs(profit_f)
+            profit = f"{profit_f:.2f}%"
+        except:
+            pass
+        message = f"{exit_type} {symbol}\nPips: TP {tp}, SL {sl}\nProfit: {profit}"
+        return message
+
     else:
-        # Se non è JSON, manda il testo così com’è
-        return f"📩 Messaggio ricevuto:\n{data}"
+        return f"{symbol}: {event}"  # fallback minimale
 
 # -----------------------
-# Endpoint webhook POST
+# Webhook POST
 # -----------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        raw_data = request.data
-        print("Raw body ricevuto:", raw_data)
+        data = request.get_json(force=True)
+        if not data:
+            return "No JSON received", 400
 
-        # Proviamo a parsare JSON
-        try:
-            data = json.loads(raw_data)
-        except Exception:
-            # Non JSON → usiamo il testo grezzo
-            data = raw_data.decode("utf-8")
-            print("Non è JSON, invio testo grezzo:", data)
+        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+            return "Invalid secret", 400
 
-        # Se è JSON, controllo il secret
-        if isinstance(data, dict):
-            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-                return "Invalid secret", 400
+        print(f"Webhook ricevuto: {data}")
 
-        # Invia messaggio su Telegram
         message = format_message(data)
         send_telegram_message(message)
 
@@ -94,11 +124,11 @@ def webhook():
         return "Internal Server Error", 500
 
 # -----------------------
-# Endpoint GET per UptimeRobot
+# UptimeRobot ping
 # -----------------------
 @app.route("/", methods=["GET"])
 def uptime():
-    print("Ping UptimeRobot ricevuto")
+    print("Ping UptimeRobot ricevuto su /")
     return "Bot online ✅", 200
 
 # -----------------------
