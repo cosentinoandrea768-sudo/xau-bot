@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import telegram
+import requests
 import os
 
 app = Flask(__name__)
@@ -9,8 +9,7 @@ app = Flask(__name__)
 # -----------------------
 TELEGRAM_TOKEN = "IL_TUO_BOT_TOKEN"
 TELEGRAM_CHAT_ID = "IL_TUO_CHAT_ID"
-
-bot = telegram.Bot(token=TELEGRAM_TOKEN)
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # -----------------------
 # Secret per il webhook
@@ -21,8 +20,14 @@ WEBHOOK_SECRET = "93ksk2kdk239dk"
 # Funzione per inviare messaggio Telegram
 # -----------------------
 def send_telegram_message(text):
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
     try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text)
+        r = requests.post(TELEGRAM_API_URL, json=payload, timeout=10)
+        r.raise_for_status()
     except Exception as e:
         print(f"Errore invio Telegram: {e}")
 
@@ -65,10 +70,8 @@ def webhook():
         if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
             return "Invalid secret", 400
 
-        # Log su server
         print(f"Webhook ricevuto: {data}")
 
-        # Formatta e invia messaggio su Telegram
         message = format_message(data)
         send_telegram_message(message)
 
@@ -83,6 +86,7 @@ def webhook():
 # -----------------------
 @app.route("/", methods=["GET"])
 def uptime():
+    print("Ping UptimeRobot ricevuto")
     return "Bot online ✅", 200
 
 # -----------------------
