@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import requests
+import json
 import os
 
 app = Flask(__name__)
@@ -47,7 +48,6 @@ def format_message(data):
     
     if profit in [None, "null"]:
         profit = "-"
-    
     if exit_price in [None, "null"]:
         exit_price = "-"
     
@@ -62,16 +62,24 @@ def format_message(data):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        data = request.get_json(force=True)
-        if not data:
-            return "No JSON received", 400
+        # Legge raw body per debug
+        raw_data = request.data
+        print("Raw body ricevuto:", raw_data)
+
+        # Prova a parsare il JSON
+        try:
+            data = json.loads(raw_data)
+        except Exception as e:
+            print(f"Errore parsing JSON: {e}")
+            return "Invalid JSON", 400
+
+        print("JSON parsato:", data)
 
         # Controllo secret
         if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
             return "Invalid secret", 400
 
-        print(f"Webhook ricevuto: {data}")
-
+        # Formatta e invia messaggio su Telegram
         message = format_message(data)
         send_telegram_message(message)
 
