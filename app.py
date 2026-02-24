@@ -7,9 +7,9 @@ import time
 
 app = Flask(__name__)
 
-# ========================
+# -----------------------
 # Variabili d'ambiente
-# ========================
+# -----------------------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("CHAT_ID")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
@@ -19,14 +19,14 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID or not WEBHOOK_SECRET:
 
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-# ========================
+# -----------------------
 # Stato segnali trend
-# ========================
+# -----------------------
 last_trend_signal = {}  # es: {'BTCUSDT': {'type':'MIN', 'value':25000, 'ts': 167676}}
 
-# ========================
+# -----------------------
 # Funzione invio Telegram
-# ========================
+# -----------------------
 def send_telegram_message(text: str):
     try:
         safe_text = html.escape(text)  # Escape HTML
@@ -44,27 +44,30 @@ def send_telegram_message(text: str):
     except Exception as e:
         print(f"Errore invio Telegram generico: {e}")
 
-# ========================
+# -----------------------
 # Helper per arrotondamenti sicuri
-# ========================
+# -----------------------
 def safe_round(val, digits=3):
     try:
         return f"{float(val):.{digits}f}"
     except:
         return val
 
-def format_profit(profit, side):
+def format_profit(entry, exit_price, side):
     try:
-        profit_f = float(profit)
-        if side.upper() == "SHORT":
-            profit_f = -profit_f  # Invertito per short
-        return f"{profit_f:.2f}%"
+        entry_f = float(entry)
+        exit_f = float(exit_price)
+        if side.upper() == "LONG":
+            profit = ((exit_f - entry_f) / entry_f) * 100
+        else:  # SHORT
+            profit = ((entry_f - exit_f) / entry_f) * 100
+        return f"{profit:.2f}%"
     except:
-        return profit
+        return "-"
 
-# ========================
+# -----------------------
 # Formatta messaggio trade
-# ========================
+# -----------------------
 def format_message(data):
     if not isinstance(data, dict):
         return str(data)
@@ -77,7 +80,6 @@ def format_message(data):
     exit_price = safe_round(data.get("exit", "N/A"))
     tp = safe_round(data.get("tp", "N/A"))
     sl = safe_round(data.get("sl", "N/A"))
-    profit = format_profit(data.get("profit_percent", "-"), side)
 
     # Apertura trade
     if event in ["OPEN", "REVERSAL_OPEN"]:
@@ -96,19 +98,24 @@ def format_message(data):
 
     # Chiusura trade
     elif event in ["TP_HIT", "SL_HIT"]:
+        profit = format_profit(entry, exit_price, side)
+        label = "TP HIT" if event == "TP_HIT" else "SL HIT"
         message = (
-            f"⚡ EXIT {side.upper()} ({event})\n"
+            f"⚡ {label} {side.upper()}\n"
             f"Pair: {symbol}\n"
-            f"Result: {profit}"
+            f"Timeframe: {timeframe}\n"
+            f"Entry: {entry}\n"
+            f"Exit: {exit_price}\n"
+            f"Profit: {profit}"
         )
         return message
 
     else:
         return f"{symbol}: {event}"
 
-# ========================
+# -----------------------
 # Webhook POST per trade (strategia)
-# ========================
+# -----------------------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -147,9 +154,9 @@ def webhook():
         print(f"Error in webhook: {e}")
         return "Internal Server Error", 500
 
-# ========================
+# -----------------------
 # Webhook POST per segnali trend
-# ========================
+# -----------------------
 @app.route("/webhook/trend", methods=["POST"])
 def trend_webhook():
     try:
@@ -171,17 +178,17 @@ def trend_webhook():
         print(f"Error in trend_webhook: {e}")
         return "Internal Server Error", 500
 
-# ========================
+# -----------------------
 # Endpoint GET per UptimeRobot
-# ========================
+# -----------------------
 @app.route("/", methods=["GET"])
 def uptime():
     print("Ping UptimeRobot ricevuto su /")
     return "Bot online ✅", 200
 
-# ========================
+# -----------------------
 # Avvio app
-# ========================
+# -----------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
