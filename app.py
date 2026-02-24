@@ -22,7 +22,7 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 # -----------------------
 # Stato segnali trend
 # -----------------------
-last_trend_signal = {}  # esempio: {'BTCUSDT': {'type': 'MIN', 'value': 25000, 'ts': 167676}}
+last_trend_signal = {}  # es: {'BTCUSDT': {'type':'MIN', 'value':25000, 'ts': 167676}}
 
 # -----------------------
 # Funzione invio Telegram
@@ -116,29 +116,43 @@ def format_message(data):
 # -----------------------
 # Webhook POST per trade (strategia)
 # -----------------------
-@app.route("/webhook/trade", methods=["POST"])
-def trade_webhook():
+@app.route("/webhook", methods=["POST"])
+def webhook():
     try:
-        data = request.json
-        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-            return "Invalid secret", 400
+        raw_data = request.data
+        print("Raw body ricevuto:", raw_data)
 
-        symbol = data.get("symbol")
+        # Proviamo a parsare JSON
+        try:
+            data = json.loads(raw_data)
+            is_json = True
+        except Exception:
+            data = raw_data.decode("utf-8")
+            is_json = False
+            print("Non è JSON, invio testo grezzo:", data)
 
-        # Valuta eventuale trade reversal sulla base dei segnali trend
-        trend = last_trend_signal.get(symbol)
-        if trend:
-            if trend["type"] == "MIN" and data.get("side", "").upper() == "LONG":
-                data["event"] = "REVERSAL_OPEN"
-            elif trend["type"] == "MAX" and data.get("side", "").upper() == "SHORT":
-                data["event"] = "REVERSAL_OPEN"
+        # Controllo secret solo se JSON
+        if is_json:
+            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+                return "Invalid secret", 400
+
+        # 🔹 Logica reversal basata sui segnali trend
+        if isinstance(data, dict):
+            symbol = data.get("symbol")
+            trend = last_trend_signal.get(symbol)
+            if trend:
+                side = data.get("side", "").upper()
+                if trend["type"] == "MIN" and side == "LONG":
+                    data["event"] = "REVERSAL_OPEN"
+                elif trend["type"] == "MAX" and side == "SHORT":
+                    data["event"] = "REVERSAL_OPEN"
 
         message = format_message(data)
         send_telegram_message(message)
-        return jsonify({"status": "ok"}), 200
 
+        return jsonify({"status": "ok"}), 200
     except Exception as e:
-        print(f"Error in trade_webhook: {e}")
+        print(f"Error in webhook: {e}")
         return "Internal Server Error", 500
 
 # -----------------------
@@ -148,7 +162,6 @@ def trade_webhook():
 def trend_webhook():
     try:
         data = request.json
-        # Non controlliamo il secret per trend se vogliamo flessibilità interna
         symbol = data.get("symbol")
         event_type = data.get("event")  # MIN o MAX
         value = data.get("value")
@@ -160,10 +173,9 @@ def trend_webhook():
             "ts": time.time()
         }
 
-        # 🔹 Non invia messaggi Telegram per trend, solo aggiorna stato
+        # 🔹 Non invia messaggi Telegram, solo aggiorna stato
         print(f"Segnale trend ricevuto: {symbol} {event_type} a {value}")
         return jsonify({"status":"ok"}), 200
-
     except Exception as e:
         print(f"Error in trend_webhook: {e}")
         return "Internal Server Error", 500
