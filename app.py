@@ -36,68 +36,55 @@ def send_telegram_message(text):
 # Formatta messaggio trade
 # -----------------------
 def format_message(data):
-    event = data.get("event", "")
-    symbol = data.get("symbol", "")
-    timeframe = data.get("timeframe", "")
-    side = data.get("side", "")
-    entry = data.get("entry", "N/A")
-    exit_price = data.get("exit", "N/A")
-    tp = data.get("tp", "N/A")
-    sl = data.get("sl", "N/A")
-    profit = data.get("profit_percent", "-")
+    if isinstance(data, dict):
+        event = data.get("event", "")
+        symbol = data.get("symbol", "")
+        timeframe = data.get("timeframe", "")
+        side = data.get("side", "")
+        entry = data.get("entry", "N/A")
+        exit_price = data.get("exit", "N/A")
+        tp = data.get("tp", "N/A")
+        sl = data.get("sl", "N/A")
+        profit = data.get("profit_percent", "-")
 
-    # Arrotondamenti
-    try:
-        entry_f = float(entry)
-        entry = f"{entry_f:.2f}"
-    except:
-        pass
-    try:
-        exit_f = float(exit_price)
-        exit_price = f"{exit_f:.2f}"
-    except:
-        pass
-    try:
-        tp_f = float(tp)
-        tp = f"{tp_f:.2f}"
-    except:
-        pass
-    try:
-        sl_f = float(sl)
-        sl = f"{sl_f:.2f}"
-    except:
-        pass
-    try:
-        profit_f = float(profit)
-        profit = f"{profit_f:.2f}%"
-    except:
-        pass
-
-    # Messaggio apertura trade
-    if event == "OPEN":
-        if side.upper() == "LONG":
-            emoji = "🚀"
-        elif side.upper() == "SHORT":
-            emoji = "🔻"
-        message = f"{emoji} {symbol} {timeframe}m\nEntry: {entry}\nTP: {tp}\nSL: {sl}"
-        return message
-
-    # Messaggio chiusura trade
-    elif "TP" in event or "SL" in event:
-        exit_type = "Exit Long" if side.upper() == "LONG" else "Exit Short"
-        # Per short, profit percentuale positiva se profitto
+        # Arrotondamenti
+        try:
+            entry = f"{float(entry):.2f}"
+        except: pass
+        try:
+            exit_price = f"{float(exit_price):.2f}"
+        except: pass
+        try:
+            tp = f"{float(tp):.2f}"
+        except: pass
+        try:
+            sl = f"{float(sl):.2f}"
+        except: pass
         try:
             profit_f = float(profit)
             if side.upper() == "SHORT":
                 profit_f = abs(profit_f)
             profit = f"{profit_f:.2f}%"
-        except:
-            pass
-        message = f"{exit_type} {symbol}\nPips: TP {tp}, SL {sl}\nProfit: {profit}"
-        return message
+        except: pass
+
+        # Messaggio apertura trade
+        if event == "OPEN":
+            emoji = "🚀" if side.upper() == "LONG" else "🔻"
+            message = f"{emoji} {symbol} {timeframe}m\nEntry: {entry}\nTP: {tp}\nSL: {sl}"
+            return message
+
+        # Messaggio chiusura trade
+        elif "TP" in event or "SL" in event:
+            exit_type = "Exit Long" if side.upper() == "LONG" else "Exit Short"
+            message = f"{exit_type} {symbol}\nPips: TP {tp}, SL {sl}\nProfit: {profit}"
+            return message
+
+        else:
+            return f"{symbol}: {event}"  # fallback minimo
 
     else:
-        return f"{symbol}: {event}"  # fallback minimale
+        # Testo semplice, invia grezzo senza "messaggio ricevuto"
+        return str(data)
 
 # -----------------------
 # Webhook POST
@@ -105,14 +92,22 @@ def format_message(data):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        data = request.get_json(force=True)
-        if not data:
-            return "No JSON received", 400
+        raw_data = request.data
+        print("Raw body ricevuto:", raw_data)
 
-        if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
-            return "Invalid secret", 400
+        # Proviamo a parsare JSON
+        try:
+            data = json.loads(raw_data)
+            is_json = True
+        except Exception:
+            data = raw_data.decode("utf-8")
+            is_json = False
+            print("Non è JSON, invio testo grezzo:", data)
 
-        print(f"Webhook ricevuto: {data}")
+        # Controllo secret solo se JSON
+        if is_json:
+            if "secret" not in data or data["secret"] != WEBHOOK_SECRET:
+                return "Invalid secret", 400
 
         message = format_message(data)
         send_telegram_message(message)
@@ -124,7 +119,7 @@ def webhook():
         return "Internal Server Error", 500
 
 # -----------------------
-# UptimeRobot ping
+# Endpoint GET per UptimeRobot
 # -----------------------
 @app.route("/", methods=["GET"])
 def uptime():
