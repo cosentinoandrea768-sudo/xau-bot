@@ -47,43 +47,62 @@ def format_message(data):
         sl = data.get("sl", "N/A")
         profit = data.get("profit_percent", "-")
 
-        # Arrotondamenti
+        # Arrotondamenti (come tuo originale, solo più precisi)
         try:
-            entry = f"{float(entry):.2f}"
-        except: pass
+            entry = f"{float(entry):.3f}"
+        except:
+            pass
         try:
-            exit_price = f"{float(exit_price):.2f}"
-        except: pass
+            tp = f"{float(tp):.3f}"
+        except:
+            pass
         try:
-            tp = f"{float(tp):.2f}"
-        except: pass
-        try:
-            sl = f"{float(sl):.2f}"
-        except: pass
+            sl = f"{float(sl):.3f}"
+        except:
+            pass
         try:
             profit_f = float(profit)
+
+            # 🔥 FIX DEFINITIVO SHORT → SEMPRE POSITIVO
             if side.upper() == "SHORT":
                 profit_f = abs(profit_f)
-            profit = f"{profit_f:.2f}%"
-        except: pass
 
-        # Messaggio apertura trade
+            profit = f"{profit_f:.2f}%"
+        except:
+            pass
+
+        # -----------------------
+        # Apertura trade (IDENTICO SCREEN)
+        # -----------------------
         if event == "OPEN":
             emoji = "🚀" if side.upper() == "LONG" else "🔻"
-            message = f"{emoji} {symbol} {timeframe}m\nEntry: {entry}\nTP: {tp}\nSL: {sl}"
+
+            message = (
+                f"{emoji} {side.upper()}\n"
+                f"Pair: {symbol}\n"
+                f"Timeframe: {timeframe}\n"
+                f"Price: {entry}\n"
+                f"TP: {tp}\n"
+                f"SL: {sl}"
+            )
             return message
 
-        # Messaggio chiusura trade
-        elif "TP" in event or "SL" in event:
-            exit_type = "Exit Long" if side.upper() == "LONG" else "Exit Short"
-            message = f"{exit_type} {symbol}\nPips: TP {tp}, SL {sl}\nProfit: {profit}"
+        # -----------------------
+        # Chiusura trade (IDENTICO SCREEN)
+        # -----------------------
+        elif event in ["TP_HIT", "SL_HIT"]:
+
+            message = (
+                f"⚡ EXIT {side.upper()}\n"
+                f"Pair: {symbol}\n"
+                f"Result: {profit}"
+            )
             return message
 
         else:
-            return f"{symbol}: {event}"  # fallback minimo
+            return f"{symbol}: {event}"
 
     else:
-        # Testo semplice, invia grezzo senza "messaggio ricevuto"
         return str(data)
 
 # -----------------------
