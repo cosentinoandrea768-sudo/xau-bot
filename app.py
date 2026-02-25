@@ -73,7 +73,6 @@ def format_message(data):
 
     # ---------------- CALCOLO PIPS ----------------
     pips_value = None
-
     if entry is not None and exit_price is not None:
         if side == "LONG":
             pips_value = exit_price - entry
@@ -81,7 +80,6 @@ def format_message(data):
             pips_value = entry - exit_price
         else:
             pips_value = exit_price - entry
-
         pips_value = round(pips_value, 2)
 
     # Formattazione pips
@@ -96,47 +94,53 @@ def format_message(data):
         pips_text = "N/A"
 
     # ---------------- EMOJI ----------------
-    emoji_open = "🚀" if side == "LONG" else "🔻"
-    emoji_tp = "🟢"
-    emoji_sl = "🔴"
-    emoji_close = "⚡️"
+    emoji_open = {"start":"🚀", "end":"📈"} if side == "LONG" else {"start":"🔻", "end":"📉"}
     emoji_reversal = "🔄"
+    emoji_tp = {"start":"🟢", "end":"🎯"}
+    emoji_sl = {"start":"🔴", "end":"🛑"}
+    emoji_close = {"start":"⚡️", "end":""}
 
     # ---------------- APERTURA ----------------
     if event in ["OPEN", "REVERSAL_OPEN"]:
 
         if event == "REVERSAL_OPEN":
-            header = f"{emoji_reversal} REVERSAL {side}"
+            header = f"{emoji_reversal} {side}"
         else:
-            header = f"{emoji_open} {side}"
+            header = f"{emoji_open['start']} {side} {emoji_open['end']}"
 
         return (
             f"{header}\n"
             f"Pair: {symbol}\n"
             f"Timeframe: {timeframe}\n"
             f"Entry: {entry:.2f}\n"
-            f"TP: {tp:.2f}\n"
-            f"SL: {sl:.2f}"
+            f"TP: {tp:.2f} {emoji_tp['end'] if tp is not None else ''}\n"
+            f"SL: {sl:.2f} {emoji_sl['end'] if sl is not None else ''}"
         )
 
     # ---------------- CHIUSURA ----------------
     elif event in ["TP_HIT", "SL_HIT", "CLOSE"]:
 
         if event == "TP_HIT":
-            header = f"{emoji_tp} TP HIT"
+            header_start = emoji_tp["start"]
+            header_end = emoji_tp["end"]
+            event_text = "TP HIT"
         elif event == "SL_HIT":
-            header = f"{emoji_sl} SL HIT"
+            header_start = emoji_sl["start"]
+            header_end = emoji_sl["end"]
+            event_text = "SL HIT"
         else:
-            header = f"{emoji_close} CLOSE"
+            header_start = emoji_close["start"]
+            header_end = emoji_close["end"]
+            event_text = "CLOSE"
 
         return (
-            f"{header}\n"
+            f"{header_start} {event_text} {header_end}\n"
             f"{side}\n"
             f"Pair: {symbol}\n"
             f"Timeframe: {timeframe}\n"
             f"Entry: {entry:.2f}\n"
             f"Exit: {exit_price:.2f}\n"
-            f"Profit: {pips_text}"
+            f"Pips: {pips_text}"
         )
 
     return f"{symbol}: {event}"
